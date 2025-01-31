@@ -1,0 +1,6 @@
+﻿/.idea/*.*
+/FileCopyFinder/bin/*
+/FileCopyFinder/obj/*
+/FileCopyFinder.UI/bin/*
+/FileCopyFinder.UI/obj/*
+*.user
