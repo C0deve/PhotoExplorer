@@ -6,12 +6,6 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <Compile Include="PhotosView.fs" />
-        <Compile Include="ImportPhotosView.fs" />
-        <Compile Include="Program.fs" />
-    </ItemGroup>
-
-    <ItemGroup>
       <PackageReference Include="Avalonia.Desktop" Version="11.2.3" />
       <PackageReference Include="Avalonia.FuncUI" Version="1.5.1" />
       <PackageReference Include="Avalonia.Themes.Fluent" Version="11.2.3" />

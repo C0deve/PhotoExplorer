@@ -56,6 +56,7 @@ public class MainWindowViewModel : ViewModelBase, IActivatableViewModel
 
         _firstLevel = loadFirstLevel.ToProperty(this, vm => vm.FirstLevel, () => []);
         _secondLevel = loadSecondLevel.ToProperty(this, vm => vm.SecondLevel, () => []);
+        
         loadImages
             .ObserveOn(RxApp.MainThreadScheduler)
             .Do(bitmap => Images.Add(bitmap))

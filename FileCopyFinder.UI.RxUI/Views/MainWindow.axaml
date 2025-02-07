@@ -1,6 +1,6 @@
 <Window
     Icon="/Assets/avalonia-logo.ico"
-    Title="FileCopyFinder.UI.RxUI"
+    Title="FileCopyFinder.FuncUI.UI.RxUI"
     d:DesignHeight="450"
     d:DesignWidth="800"
     mc:Ignorable="d"
