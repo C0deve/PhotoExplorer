@@ -1,6 +1,5 @@
-﻿/.idea/*.*
-/FileCopyFinder/bin/*
-/FileCopyFinder/obj/*
-/FileCopyFinder.UI/bin/*
-/FileCopyFinder.UI/obj/*
+﻿.idea/
+**/bin
+**/obj
 *.user
+/FileCopyFinder.UI.RxUI/FodyWeavers.xsd
