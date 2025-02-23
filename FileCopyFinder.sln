@@ -4,6 +4,8 @@ Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "FileCopyFinder.FuncUI", "Fi
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FileCopyFinder.UI.RxUI", "FileCopyFinder.UI.RxUI\FileCopyFinder.UI.RxUI.csproj", "{0DFEE21C-B7C9-42E4-A209-0E9B4F896710}"
 EndProject
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "FileCopyFinder.UI.FuncUI.Mvu", "FileCopyFinder.UI.FuncUI.Mvu\FileCopyFinder.UI.FuncUI.Mvu.fsproj", "{673C2FFF-921B-4A42-B080-104F045C7F89}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -18,5 +20,9 @@ Global
 		{0DFEE21C-B7C9-42E4-A209-0E9B4F896710}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{0DFEE21C-B7C9-42E4-A209-0E9B4F896710}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{0DFEE21C-B7C9-42E4-A209-0E9B4F896710}.Release|Any CPU.Build.0 = Release|Any CPU
+		{673C2FFF-921B-4A42-B080-104F045C7F89}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{673C2FFF-921B-4A42-B080-104F045C7F89}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{673C2FFF-921B-4A42-B080-104F045C7F89}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{673C2FFF-921B-4A42-B080-104F045C7F89}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal

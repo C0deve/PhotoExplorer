@@ -3,3 +3,4 @@
 **/obj
 *.user
 /FileCopyFinder.UI.RxUI/FodyWeavers.xsd
+.fake
