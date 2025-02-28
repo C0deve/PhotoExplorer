@@ -14,9 +14,10 @@ type MainWindow() as this =
         base.Title <- "Mes photos"
 
         MainView.program
-        //PhotoGalleryGenerativeAI.program
         |> Program.withHost this
+#if DEBUG
         |> Program.withConsoleTrace
+#endif
         |> Program.runWithAvaloniaSyncDispatch ()
 
 type App() =

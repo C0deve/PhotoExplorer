@@ -6,7 +6,6 @@ open Elmish
 open Avalonia.Controls
 open Avalonia.FuncUI
 open Avalonia.FuncUI.DSL
-open Avalonia.Media.Imaging
 
 type Model =
     { PhotoGallery: PhotoGallery.Model
@@ -18,24 +17,11 @@ type Model =
       SelectedSubDirectory: string option }
 
 type Msg =
-    | PhotoGallery of PhotoGallery.Msg
+    | PhotoGalleryMsg of PhotoGallery.Msg
     | LoadDrives
     | DriveSelected of DriveInfo
-    | LoadDirectories of string
     | DirectorySelected of string
-    | LoadSubDirectories of string
     | SubDirectorySelected of string
-
-
-let private loadPhotoBitmap (path: string) =
-    async {
-        try
-            use stream = File.OpenRead(path)
-            let bitmap = Bitmap.DecodeToWidth(stream, 200, BitmapInterpolationMode.LowQuality)
-            return Some(path, bitmap)
-        with _ ->
-            return None
-    }
 
 let private init () =
     { PhotoGallery = PhotoGallery.init ()
@@ -47,15 +33,21 @@ let private init () =
       SelectedSubDirectory = None },
     Cmd.ofMsg LoadDrives
 
+let private getDirectories path =
+    try
+        Directory.GetDirectories(path) |> Array.toList
+    with _ ->
+        []
+
 let private update msg model =
 
     match msg with
-    | PhotoGallery msg ->
+    | PhotoGalleryMsg msg ->
         let mPhotoGallery, cmd = PhotoGallery.update msg model.PhotoGallery
 
         { model with
             PhotoGallery = mPhotoGallery },
-        Cmd.map PhotoGallery cmd
+        Cmd.map PhotoGalleryMsg cmd
 
     | LoadDrives ->
         let drives = DriveInfo.GetDrives() |> Array.toList
@@ -64,40 +56,23 @@ let private update msg model =
     | DriveSelected drive ->
         { model with
             SelectedDrive = Some drive
-            Directories = []
+            Directories = getDirectories drive.RootDirectory.FullName
             SelectedDirectory = None
             SubDirectories = []
             SelectedSubDirectory = None },
-        Cmd.ofMsg (LoadDirectories drive.RootDirectory.FullName)
-
-    | LoadDirectories path ->
-        let dirs =
-            try
-                Directory.GetDirectories(path) |> Array.toList
-            with _ ->
-                []
-
-        { model with Directories = dirs }, Cmd.none
+        (PhotoGallery.Msg.StartLoadingPhotos drive.Name) |> PhotoGalleryMsg |> Cmd.ofMsg
 
     | DirectorySelected dir ->
         { model with
             SelectedDirectory = Some dir
-            SubDirectories = []
+            SubDirectories = getDirectories dir
             SelectedSubDirectory = None },
-        Cmd.ofMsg (LoadSubDirectories dir)
+        (PhotoGallery.Msg.StartLoadingPhotos dir) |> PhotoGalleryMsg |> Cmd.ofMsg
 
-    | LoadSubDirectories path ->
-        let subdirs =
-            try
-                Directory.GetDirectories(path) |> Array.toList
-            with _ ->
-                []
-
-        { model with SubDirectories = subdirs }, (PhotoGallery.Msg.StartLoadingPhotos path) |> PhotoGallery |> Cmd.ofMsg
     | SubDirectorySelected dir ->
         { model with
             SelectedSubDirectory = Some dir },
-        (PhotoGallery.Msg.StartLoadingPhotos dir) |> PhotoGallery |> Cmd.ofMsg
+        (PhotoGallery.Msg.StartLoadingPhotos dir) |> PhotoGalleryMsg |> Cmd.ofMsg
 
 let private view model dispatch =
     DockPanel.create
@@ -138,4 +113,8 @@ let private view model dispatch =
 
                 PhotoGallery.view model.PhotoGallery ] ]
 
-let program = Program.mkProgram init update view
+let subscribe model =
+    Sub.map "photoGallery" PhotoGalleryMsg (PhotoGallery.subscribe model.PhotoGallery)
+
+let program =
+    Program.mkProgram init update view |> Program.withSubscription subscribe

@@ -2,6 +2,7 @@
 module PhotoGallery
 
 open System
+open System.Threading
 open Avalonia.Controls.Templates
 open Avalonia.Media
 open System.IO
@@ -10,95 +11,133 @@ open Avalonia.Controls
 open Avalonia.FuncUI
 open Avalonia.FuncUI.DSL
 open Avalonia.Media.Imaging
+open Microsoft.FSharp.Core
 
 type LoadingPhotoId = Guid
 type PhotoPath = string
+type FolderPath = string
 
-type LoadOperation =
-    { PhotosToLoad: PhotoPath list
-      Id: LoadingPhotoId
-      TotalCount: int }
+type LoadOperationStatus =
+    | WaitingForStart of FolderPath: FolderPath
+    | Started of Id: LoadingPhotoId * TotalCount: int
 
 type Model =
-    { LoadedPhotos: (PhotoPath * Bitmap) list
-      LoadOperation: LoadOperation option }
+    { Photos: (PhotoPath * Bitmap) list
+      LoadOperation: LoadOperationStatus option }
 
 type Msg =
-    | StartLoadingPhotos of PhotoPath
-    | PhotosLoaded of (LoadingPhotoId * (PhotoPath * Bitmap) list)
-    | TryToLoadNextPhotosIfAny of LoadingPhotoId
-    | LoadingComplete of LoadingPhotoId
+    | StartLoadingPhotos of FolderPath
+    | LoadingStarted of (LoadingPhotoId * int)
+    | PhotosLoaded of (LoadingPhotoId * (PhotoPath * Bitmap) array)
+    | LoadingCompleted of LoadingPhotoId
 
 let parallelPhotoProcessingCount = 5
 
-let private loadPhotoBitmap (path: PhotoPath) =
-    async {
-        try
-            use stream = File.OpenRead(path)
-            let bitmap = Bitmap.DecodeToWidth(stream, 200, BitmapInterpolationMode.LowQuality)
-            return Some(path, bitmap)
-        with _ ->
-            return None
-    }
+let private readFileAsBitmap (path: PhotoPath) =
+    use stream = File.OpenRead(path)
+    let bitmap = Bitmap.DecodeToWidth(stream, 200, BitmapInterpolationMode.LowQuality)
+    (path, bitmap)
 
-let init () =
-    { LoadedPhotos = []
-      LoadOperation = None }
+
+let private mkDisposable f =
+    { new IDisposable with
+        member _.Dispose() = f () }
+
+let runParallelRead operationId directory dispatch =
+
+    let isAuthorize x =
+        Seq.contains x [| ".jpg"; ".jpeg"; ".png"; ".gif" |]
+
+    let files =
+        Directory.EnumerateFiles(directory)
+        |> Seq.where (fun x -> x |> Path.GetExtension |> isAuthorize)
+        |> List.ofSeq
+
+    match files with
+    | [] ->
+        LoadingCompleted operationId |> dispatch
+
+        { new IDisposable with
+            member this.Dispose() = () }
+    | files ->
+        LoadingStarted(operationId, files.Length) |> dispatch
+
+        let pipeline =
+            async {
+                let! _ =
+                    files
+                    |> List.map PhotoPath
+                    |> List.map (fun path ->
+                        async {
+                            use stream = File.OpenRead(path)
+                            let bitmap = Bitmap.DecodeToWidth(stream, 200, BitmapInterpolationMode.LowQuality)
+                            return (path, bitmap)
+                        })
+                    |> List.chunkBySize 15
+                    |> List.map (fun chunk ->
+                        async {
+                            let! messages = Async.Parallel chunk
+                            PhotosLoaded(operationId, messages) |> dispatch
+                            do! Async.Sleep(150) // pause to keep UI responsive
+                        })
+                    |> Async.Sequential                    
+
+                dispatch (LoadingCompleted operationId)
+            }
+
+        let cts = new CancellationTokenSource()
+        let token = cts.Token
+
+        Async.Start(
+            pipeline,
+            cancellationToken = token
+        )
+
+        mkDisposable (fun () ->
+            cts.Cancel()
+            cts.Dispose())
+
+let subscribe (model: Model) =
+    [ match model.LoadOperation with
+      | Some operation ->
+          let operationId, folderPath =
+              match operation with
+              | WaitingForStart path -> Guid.NewGuid(), path
+              | Started(id, _) -> id, ""
+
+          [ operationId |> string ], runParallelRead operationId folderPath
+
+      | _ -> () ]
+
+let init () = { Photos = []; LoadOperation = None }
 
 let update msg model =
 
-    match msg, model.LoadOperation with
-    | StartLoadingPhotos directory, _ ->
-        let photosToLoad = Directory.EnumerateFiles(directory, "*.jpg") |> Seq.toList
-
-        match photosToLoad with
-        | [] -> init (), Cmd.none
-        | photos ->
-            let newOperationId = Guid.NewGuid()
-
-            let operation =
-                { Id = newOperationId
-                  PhotosToLoad = photos
-                  TotalCount = photos.Length }
-
+    let newModel =
+        match msg, model.LoadOperation with
+        | StartLoadingPhotos directory, _ ->
             { model with
-                LoadOperation = Some operation
-                LoadedPhotos = [] },
-            Cmd.ofMsg (TryToLoadNextPhotosIfAny newOperationId)
+                LoadOperation = directory |> LoadOperationStatus.WaitingForStart |> Some
+                Photos = [] }
 
-    | TryToLoadNextPhotosIfAny operationId, Some operation when operationId = operation.Id ->
-        let nextPhoto = operation.PhotosToLoad |> List.truncate parallelPhotoProcessingCount
+        | LoadingCompleted(operationId), Some(Started(currentId, _)) when operationId = currentId ->
+            { model with LoadOperation = None }
 
-        let nextCmd =
-            match nextPhoto with
-            | [] -> Cmd.ofMsg (LoadingComplete operationId)
-            | photos ->
-                Cmd.OfAsync.perform
-                    (fun paths ->
-                        async {
-                            let! results = paths |> List.map loadPhotoBitmap |> Async.Parallel
-                            return operationId, results |> Array.choose id |> Array.toList
-                        })
-                    photos
-                    PhotosLoaded
+        | LoadingCompleted(operationId), Some(Started(currentId, _)) when operationId <> currentId -> model
 
-        model, nextCmd
+        | LoadingCompleted _, Some(WaitingForStart _) -> { model with LoadOperation = None }
 
-    | PhotosLoaded(operationId, newPhotos), Some operation when operationId = operation.Id ->
-        let remainingPhotos = operation.PhotosToLoad |> List.skip newPhotos.Length
+        | LoadingStarted(operationId, total), Some(WaitingForStart _) ->
+            { model with
+                LoadOperation = (operationId, total) |> LoadOperationStatus.Started |> Some }
 
-        { model with
-            LoadedPhotos = newPhotos @ model.LoadedPhotos
-            LoadOperation =
-                Some
-                    { operation with
-                        PhotosToLoad = remainingPhotos } },
-        Cmd.ofMsg (TryToLoadNextPhotosIfAny operationId)
+        | PhotosLoaded(operationId, array), Some(Started(currentId, _)) when operationId = currentId ->
+            { model with
+                Photos = model.Photos @ (array |> Array.toList) }
 
-    | LoadingComplete(operationId), Some operation when operationId = operation.Id ->
-        { model with LoadOperation = None }, Cmd.none
+        | _ -> model
 
-    | _ -> init (), Cmd.none
+    newModel, Cmd.none
 
 let private imageView source =
     let imageWidth = 200
@@ -118,18 +157,18 @@ let view model =
     DockPanel.create
         [ DockPanel.children
               [ match model.LoadOperation with
-                | Some operation ->
+                | Some(Started(_, totalCount)) ->
                     ProgressBar.create
                         [ ProgressBar.dock Dock.Top
                           ProgressBar.margin (10.0, 0.0)
                           ProgressBar.minimum 0
-                          ProgressBar.maximum (operation.TotalCount |> double)
-                          ProgressBar.value model.LoadedPhotos.Length
+                          ProgressBar.maximum (totalCount |> double)
+                          ProgressBar.value model.Photos.Length
                           ProgressBar.showProgressText true
                           ProgressBar.progressTextFormat "{}{0}/{3} Photos Complete ({1:0}%)" ]
-                | None -> ()
+                | _ -> ()
                 ListBox.create
                     [ ListBox.itemsPanel (FuncTemplate<Panel>(fun _ -> WrapPanel()))
                       ListBox.itemTemplate (DataTemplateView<Bitmap>.create imageView)
-                      ListBox.dataItems (model.LoadedPhotos |> List.map snd)
+                      ListBox.dataItems (model.Photos |> List.map snd)
                       ListBox.dock Dock.Right ] ] ]
